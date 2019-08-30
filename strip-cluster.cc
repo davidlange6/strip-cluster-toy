@@ -81,7 +81,7 @@ FEDSet fillFeds()
 }
 
 std::vector<SiStripCluster>
-fillClusters(detId_t idet, Clusterizer& clusterizer, const std::vector<FEDChannel>& channels)
+fillClusters(detId_t idet, Clusterizer& clusterizer, const std::vector<FEDChannel>& channels, std::ofstream& digidata_out)
 {
   static bool first = true;
   std::vector<SiStripCluster> out;
@@ -107,6 +107,26 @@ fillClusters(detId_t idet, Clusterizer& clusterizer, const std::vector<FEDChanne
   // initialize ADC for strips
   for (auto const& digi : detDigis) {
     det.setADC(digi.strip(), digi.adc());
+  }
+
+  for (auto const& chan : channels) {
+    for(auto const& digi : detDigis) {
+      fedId_t fedId=chan.fedId();
+      fedCh_t fedCh=chan.fedCh();
+      uint16_t strip=digi.strip();
+      uint16_t adc=digi.adc();
+      float noise=det.noise(strip);
+      float gain=det.gain(strip);
+      bool bad=det.bad(strip);
+      digidata_out.write((char*)&idet, sizeof(detId_t));
+      digidata_out.write((char*)&fedId, sizeof(fedId_t));	
+      digidata_out.write((char*)&fedCh, sizeof(fedCh_t));
+      digidata_out.write((char*)&strip, sizeof(uint16_t));
+      digidata_out.write((char*)&adc, sizeof(uint16_t));
+      digidata_out.write((char*)&noise, sizeof(float));
+      digidata_out.write((char*)&gain, sizeof(float));
+      digidata_out.write((char*)&bad, sizeof(bool));
+    }
   }
 
   // create seedStrips
@@ -157,11 +177,34 @@ int main()
   Clusterizer clusterizer;
   //  Clusterizer::State state;
 
+  std::ofstream digidata_out("digidata.bin", std::ofstream::out | std::ios::binary);
+  std::ifstream digidata_in("digidata.bin", std::ofstream::in | std::ios::binary);
+
   FEDSet feds(fillFeds());
   for (auto idet : clusterizer.allDetIds()) {
     if (feds.find(idet) != feds.end()) {
-      auto out = fillClusters(idet, clusterizer, feds[idet]);
+      auto out = fillClusters(idet, clusterizer, feds[idet], digidata_out);
     }
+  }
+
+  // test digidata output]
+  detId_t detid;
+  while (digidata_in.read((char*)&detid, sizeof(detid)).gcount() == sizeof(detid)) {
+    fedId_t fedId;
+    fedCh_t fedCh;
+    uint16_t strip;
+    uint16_t adc;
+    float noise;
+    float gain;
+    bool bad;
+    digidata_in.read((char*)&fedId, sizeof(fedId_t));
+    digidata_in.read((char*)&fedCh, sizeof(fedCh_t));
+    digidata_in.read((char*)&strip, sizeof(uint16_t));
+    digidata_in.read((char*)&adc, sizeof(uint16_t));
+    digidata_in.read((char*)&noise, sizeof(float));
+    digidata_in.read((char*)&gain, sizeof(float));
+    digidata_in.read((char*)&bad, sizeof(bool));	
+    std::cout<<" detid "<< detid <<" fedId "<<fedId<<" fedCh "<<(int)fedCh<<" strip "<<strip<<" adc "<<adc<<" noise "<<noise<<" gain "<<gain<<" bad "<<bad<<std::endl;
   }
 
   return 0;
