@@ -81,31 +81,60 @@ FEDSet fillFeds()
 }
 
 std::vector<SiStripCluster>
-fillClusters(detId_t idet, Clusterizer& clusterizer, Clusterizer::State& state, const std::vector<FEDChannel>& channels)
+fillClusters(detId_t idet, Clusterizer& clusterizer, const std::vector<FEDChannel>& channels)
 {
   static bool first = true;
   std::vector<SiStripCluster> out;
-  std::vector<SiStripDigi> input; 
+  std::vector<SiStripDigi> detDigis; 
+  std::vector<uint16_t> seedStrips;
+  std::vector<uint16_t> seedStrips_noduplicate; 
 
   // start clusterizing for idet
-  auto const & det = clusterizer.stripByStripBegin(idet);
-  state.reset(det);
+  //auto const & det = clusterizer.stripByStripBegin(idet);
+  //state.reset(det);
 
   // unpack RAW data to SiStripDigi
   for (auto const& chan : channels) {
     //        std::cout << "Processing channel for detid " << idet << " fed " << chan.fedId() << " channel " << (int) chan.fedCh() << " len:off " << chan.length() << ":" << chan.offset() << " ipair " << chan.iPair() << std::endl;
     //auto perStripAdder = StripByStripAdder(clusterizer, state, out);
     //unpackZS(chan, chan.iPair()*256, perStripAdder, idet);
-    unpackZS2(chan, chan.iPair()*256, input, idet);
+    unpackZS2(chan, chan.iPair()*256, detDigis, idet);
   }
 
-  // process each digi 
-  for (auto const& digi : input) {
-    clusterizer.stripByStripAdd(state, digi.strip(), digi.adc(), out);
+  // start clusterizing for idet
+  auto& det = clusterizer.getDet(idet);
+
+  // initialize ADC for strips
+  for (auto const& digi : detDigis) {
+    det.setADC(digi.strip(), digi.adc());
   }
 
-  // end clusterizing for idet
-  clusterizer.stripByStripEnd(state, out);
+  // create seedStrips
+  for (auto const& digi : detDigis) {
+    Clusterizer::State state(det);
+    if (clusterizer.seedStrip(state, digi.strip())) {
+      seedStrips.push_back(digi.strip());
+    }
+  }
+
+  // create non-duplicated seedStrips 
+  for (int i=1; i<seedStrips.size(); i++) {
+    if (seedStrips[i] - seedStrips[i-1]!=1) 
+      seedStrips_noduplicate.push_back(seedStrips[i]);
+  }
+
+  // process each seedStrip digi
+  //for (auto const& digi : detDigis) {
+  for (auto ss : seedStrips_noduplicate) {
+    Clusterizer::State state(det);
+    state.reset(det);
+    if (clusterizer.seedStrip(state, ss)) {
+      SiStripCluster cluster;
+      clusterizer.findCluster(state, ss, cluster);
+      if (cluster.amplitudes().size() > 0)
+	out.push_back(cluster);
+    }
+  }
 
   if (first) {
     first = false;
@@ -126,13 +155,15 @@ int main()
 {
   //std::cout << "start initializing clusterizer" << std::endl;
   Clusterizer clusterizer;
-  Clusterizer::State state;
+  //  Clusterizer::State state;
 
-  //std::cout << "start fillFeds" <<std::endl;
   FEDSet feds(fillFeds());
   for (auto idet : clusterizer.allDetIds()) {
     if (feds.find(idet) != feds.end()) {
-      auto out = fillClusters(idet, clusterizer, state, feds[idet]);
+      auto out = fillClusters(idet, clusterizer, feds[idet]);
     }
   }
+
+  return 0;
+
 }

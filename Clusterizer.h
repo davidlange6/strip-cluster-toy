@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <vector>
@@ -17,6 +18,7 @@ public:
   // state of detID
   class Det {
     struct DetStrip {
+    DetStrip():noise_(0), bad_(false) {;} 
       uint16_t strip_;
       float noise_;
       float gain_;
@@ -29,10 +31,14 @@ public:
     float gain(const uint16_t& strip)  const { return strips_[strip-offset_].gain_; }
     bool bad(const uint16_t& strip)    const { return strips_[strip-offset_].bad_; }
     bool allBadBetween(uint16_t L, const uint16_t& R) const { while( ++L < R  &&  bad(L)) {}; return L == R; }
+    uint8_t getADC(const uint16_t& strip) const { return ADCs_[strip-offset_]; } 
+    bool setADC(const uint16_t& strip, const uint16_t& adc) {ADCs_[strip-offset_]=adc;}
+    int getOffset() const {return offset_; }
     detId_t id() const { return id_; }
   private:
     std::vector<DetStrip> strips_;
     std::vector<fedId_t> fedIDs_;
+    std::vector<uint8_t> ADCs_;
     detId_t id_ = 0;
     int offset_ = 0;
   };
@@ -45,35 +51,45 @@ public:
     void reset(Det const& idet) {
       mp_det = &idet;
       ADCs.clear();
-      lastStrip = 0; noiseSquared = 0; candidateLacksSeed = true;
+      lastStripLeft = 0; lastStripRight = 0; noiseSquared = 0; //candidateLacksSeed = true;
     }
     std::vector<uint8_t> ADCs;  
-    uint16_t lastStrip=0;
+    uint16_t lastStripLeft=0;
+    uint16_t lastStripRight=0;
     float noiseSquared=0;
-    bool candidateLacksSeed=true;
+    //    bool candidateLacksSeed=true;
   private:
     Det const * mp_det;
   };
 
-  Det stripByStripBegin(uint32_t id) const;
+  //  Det stripByStripBegin(uint32_t id) const;
+  Det& getDet(uint32_t id);
 
-  void stripByStripEnd(State & state, std::vector<SiStripCluster>& out) const;
-  void stripByStripAdd(State & state, uint16_t strip, uint8_t adc, std::vector<SiStripCluster>& out) const;
+  //void stripByStripEnd(State & state, std::vector<SiStripCluster>& out) const;
+  //void stripByStripAdd(State & state, uint16_t strip, uint8_t adc, std::vector<SiStripCluster>& out) const;
+  bool seedStrip(State& state, uint16_t strip) const;
+  void findCluster(State& state, uint16_t strip, SiStripCluster& out) const;
 
   std::vector<uint32_t> const & allDetIds() const { return detIds_;}
-  Det findDetId(const uint32_t) const;
+  //  Det findDetId(const uint32_t) const;
 
 private:
   //constant methods with state information
-  uint16_t firstStrip(State const & state) const {return state.lastStrip - state.ADCs.size() + 1;}
-  bool candidateEnded(State const & state, const uint16_t&) const;
+  uint16_t firstStrip(State const & state) const {return state.lastStripRight - state.ADCs.size() + 1;}
+  void addToCandidateLeft(State & state, uint16_t strip) const;
+  void addToCandidateRight(State & state, uint16_t strip) const;
+  bool candidateEndedLeft(State const & state, const uint16_t&) const;
+  bool candidateEndedRight(State const & state, const uint16_t&) const;
+  void findLeftBoundary(State & state, uint16_t strip) const;
+  void findRightBoundary(State & state, uint16_t strip) const;
+
   bool candidateAccepted(State const & state) const;
 
   //state modification methods
   template<class T> void endCandidate(State & state, T&) const;
-  void clearCandidate(State & state) const { state.candidateLacksSeed = true;  state.noiseSquared = 0;  state.ADCs.clear();}
-  void addToCandidate(State & state, const SiStripDigi& digi) const { addToCandidate(state, digi.strip(),digi.adc());}
-  void addToCandidate(State & state, uint16_t strip, uint8_t adc) const;
+  void clearCandidate(State & state) const { state.noiseSquared = 0;  state.ADCs.clear();}
+  //void addToCandidate(State & state, const SiStripDigi& digi) const { addToCandidate(state, digi.strip(),digi.adc());}
+  //void addToCandidate(State & state, uint16_t strip, uint8_t adc) const;
   void appendBadNeighbors(State & state) const;
   void applyGains(State & state) const;
 

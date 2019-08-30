@@ -43,6 +43,12 @@ public:
 		 Iter begin, Iter end ):
 	 amplitudes_(begin,end), firstStrip_(firstStrip) {}
 
+  template<typename Iter>
+  void initialize(const uint16_t& firstStrip, Iter begin, Iter end) {
+    amplitudes_.insert(amplitudes_.begin(),begin,end);
+    firstStrip_=firstStrip;
+  }
+
   /** The number of the first strip in the cluster.
    *  The high bit of firstStrip_ indicates whether the cluster is a candidate for being merged.
    */
@@ -71,3 +77,4 @@ private:
   std::vector<uint8_t>   amplitudes_;
   uint16_t                firstStrip_ = 0;
 };
+
